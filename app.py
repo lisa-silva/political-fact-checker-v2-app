@@ -5,12 +5,10 @@ import time
 from typing import Dict, Any, List
 
 # --- Configuration ---
-# NOTE: This line requires a file named .streamlit/secrets.toml
-# containing the [tool_auth] section with the gemini_api_key.
+# API Key is read directly from the Streamlit Secrets manager
 API_KEY = st.secrets.tool_auth.gemini_api_key
-# Using the latest stable preview model known for grounding and reasoning
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
-MODEL_NAME = "gemini-2.5-flash-preview-09-2025"
+API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent"
+MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 MAX_RETRIES = 5
 
 # --- Core LLM Function with Google Search Grounding ---
@@ -18,30 +16,33 @@ MAX_RETRIES = 5
 @st.cache_data(show_spinner=False)
 def fact_check_claim(claim: str) -> Dict[str, Any]:
     """
-    Sends a political claim to the Gemini model with Google Search enabled 
-    to ground the response in real-time, verifiable information.
+    Sends a political claim to the Gemini model, forcing it to look up 
+    real-time facts and provide a structured verification analysis.
     """
     
-    # Define the System Prompt for impartial fact-checking
+    # 1. Define the Impartial Fact-Checker System Prompt
     system_prompt = (
-        "You are an impartial, highly detailed Political Fact-Checker. "
-        "Your primary goal is to analyze the user's claim against real-time information and publicly documented sources. "
+        "You are an impartial, highly detailed Political Fact-Checker and Investigative Analyst. "
+        "Your primary goal is to verify the user's claim against publicly available, current information from reliable sources. "
+        "You MUST structure your response into the following four distinct, fact-based sections using markdown headings: "
         
-        "Structure your response into the following format: "
+        "1. **Verification Status:** Categorize the claim as one of the following: **TRUE**, **FALSE**, **MISLEADING**, or **UNVERIFIABLE**. Provide a one-sentence justification for this status. "
+        "2. **Supporting Evidence:** Provide specific, verifiable data, quotes, or events that support the claim. Cite the source type (e.g., 'Official Report,' 'Statement by X,' 'News Article'). "
+        "3. **Contradicting Evidence/Context:** Provide specific data, events, or critical context that contradicts or complicates the claim. Explain any missing context that makes the claim misleading. "
+        "4. **Policy/Historical Context:** Briefly place the claim within its relevant historical or legislative background (e.g., specific bill, treaty, or election cycle). "
         
-        "1. **Claim Analysis:** Clearly restate the claim being analyzed. "
-        "2. **Factual Verification:** Use information retrieved from Google Search to verify or refute the claim. Assign a clear status (e.g., 'TRUE,' 'FALSE,' 'MISLEADING,' or 'UNVERIFIABLE'). "
-        "3. **Supporting Details:** Provide a concise, balanced explanation of the evidence found, including dates, sources, and context to support your verification status. "
-        
-        "You MUST use Google Search for grounding to ensure accuracy. Maintain a neutral, journalistic tone."
+        "You must use Google Search for grounding to ensure all claims are based on current, verifiable, and cited public information."
     )
 
-    user_query = f"Fact-check the following political claim: '{claim}'"
+    # 2. Define the User Query
+    user_query = (
+        f"Fact-check the political claim: '{claim}'"
+    )
     
-    # Construct the Payload
+    # 3. Construct the Payload
     payload = {
         "contents": [{"parts": [{"text": user_query}]}],
-        "tools": [{"google_search": {} }],  # Crucial: Enable Google Search for grounding
+        "tools": [{"google_search": {} }], # Enable Google Search for grounding
         "systemInstruction": {"parts": [{"text": system_prompt}]},
     }
     
@@ -49,7 +50,6 @@ def fact_check_claim(claim: str) -> Dict[str, Any]:
     
     for attempt in range(MAX_RETRIES):
         try:
-            # Use the API key in the URL
             response = requests.post(f"{API_URL}?key={API_KEY}", headers=headers, data=json.dumps(payload), timeout=60)
             response.raise_for_status()
             
@@ -71,19 +71,15 @@ def fact_check_claim(claim: str) -> Dict[str, Any]:
                 return {"text": text, "sources": sources}
 
             else:
-                # Handle cases where the model response is empty or malformed
-                return {"text": "Error: Model returned an empty response candidate. Please try a different query.", "sources": []}
+                return {"text": "Error: Model returned an empty response candidate. Please try again.", "sources": []}
 
         except requests.exceptions.RequestException as e:
             if attempt < MAX_RETRIES - 1:
-                # Exponential backoff
                 delay = 2 ** attempt
                 time.sleep(delay)
             else:
-                # Max retries reached
-                return {"text": f"Error: Failed to connect to the verification service after {MAX_RETRIES} attempts. Details: {e}", "sources": []}
+                return {"text": f"Error: Failed to connect to the Fact-Checker service after {MAX_RETRIES} attempts. Details: {e}", "sources": []}
         except Exception as e:
-            # Catch all other unexpected errors
             return {"text": f"An unexpected error occurred during API processing: {e}", "sources": []}
 
 
@@ -93,34 +89,37 @@ def main():
     """Defines the layout and interactivity of the Streamlit app."""
     
     st.set_page_config(
-        page_title="Political Fact-Checker", 
+        page_title="The Political Fact-Checker", 
         layout="wide",
         initial_sidebar_state="collapsed"
     )
 
-    st.title("🗳️ Political Fact-Checker (LLM Powered)")
+    st.title("🏛️ The Political Fact-Checker")
     st.markdown(
         """
-        A neutral, AI-powered tool designed to check the veracity of political statements and claims
-        by grounding them in real-time information using Google Search.
+        Enter any specific political statement, quote, or claim below. This tool acts as an impartial analyst, 
+        using **real-time Google Search grounding** to verify the claim and provide supporting and contradicting evidence.
         """
     )
     
+    # Text Area for the user's premise
     claim_input = st.text_area(
-        "Enter a Political Claim for Verification:",
-        placeholder="E.g., 'Inflation reached its highest level in 40 years during the third quarter of 2025.'",
+        "Enter a Specific Political Claim for Verification:",
+        placeholder="E.g., 'The federal debt has increased by 10% in the last quarter.' or 'Candidate X promised to repeal the 2024 infrastructure bill.'",
         height=100
     )
 
+    # Button to trigger the analysis
     if st.button("Verify Claim", type="primary"):
         if claim_input:
-            with st.spinner("Searching and verifying claim against real-time data..."):
+            with st.spinner("Searching current events and verifying claim..."):
                 results = fact_check_claim(claim_input)
             
             # --- Display Results ---
-            st.markdown("### 🔎 Verification Results")
+            st.markdown("### ✅ Verification Report")
             st.markdown(results["text"])
             
+            # Display the sources if they exist
             if results["sources"]:
                 st.markdown("---")
                 st.subheader("🌐 Grounding Sources")
@@ -128,15 +127,15 @@ def main():
                 source_list = ""
                 for i, source in enumerate(results["sources"], 1):
                     title = source.get('title') or source['uri']
-                    # Using a numbered list for clarity
-                    source_list += f"{i}. **[{title}]({source['uri']})**\n"
+                    source_list += f"- **[{title}]({source['uri']})**\n"
                 
                 st.markdown(source_list)
+                st.caption("Note: Grounding sources are provided by Google Search to support the verification and context.")
             else:
-                st.warning("No specific grounding sources were found, or the model relied on internal knowledge.")
+                st.warning("No specific grounding sources were found.")
             
         else:
-            st.warning("Please enter a claim to begin analysis.")
+            st.warning("Please enter a claim to begin verification.")
 
 if __name__ == "__main__":
     main()
