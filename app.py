@@ -16,7 +16,7 @@
         }
         /* Simple spinner animation */
         .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
+           # border: 4px solid rgba(0, 0, 0, 0.1);
             border-left-color: #4f46e5;
             border-radius: 50%;
             width: 24px;
