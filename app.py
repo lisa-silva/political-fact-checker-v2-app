@@ -2,29 +2,21 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# === Config ===
 st.set_page_config(page_title="Political Fact-Checker", layout="centered")
 
-# === API Setup ===
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-
 if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY missing. Add it to .streamlit/secrets.toml")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
+
 model = genai.GenerativeModel(
     "gemini-1.5-flash",
-    system_instruction="""
-You are an impartial political fact-checker. Analyze the claim using search results only.
-Verdict must be: True, False, Misleading, Lacks Context, or Unverifiable.
-Provide concise analysis with supporting and contradicting evidence.
-End with clear conclusion and cited sources.
-""",
+    system_instruction="You are an impartial political fact-checker. Analyze the claim using search results only. Verdict: True, False, Misleading, Lacks Context, or Unverifiable. Provide concise analysis with evidence and sources.",
     tools=["google_search_retrieval"]
 )
 
-# === UI ===
 st.title("🏛️ Political Fact-Checker")
 st.markdown("Enter a political claim to get an instant, sourced fact-check.")
 
@@ -37,14 +29,12 @@ if st.button("Verify Claim", type="primary"):
         st.stop()
 
     with st.spinner("Searching & verifying..."):
-        response = model.generate_content(
-            f"Claim: {claim}\nContext: {context or 'None'}"
-        )
+        response = model.generate_content(f"Claim: {claim}\nContext: {context or 'None'}")
 
     st.subheader("Verdict & Analysis")
     st.write(response.text)
 
-    if response.candidates[0].grounding_attributions:
+    if hasattr(response, "candidates") and response.candidates and response.candidates[0].grounding_attributions:
         st.subheader("Sources")
         for attr in response.candidates[0].grounding_attributions:
             web = attr.grounding_support[0].web
