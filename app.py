@@ -37,11 +37,10 @@ if st.button("Verify Claim", type="primary"):
         st.stop()
 
     with st.spinner("Searching & verifying..."):
-    try:
-    response = model.generate_content(f"Claim: {claim}\nContext: {context or 'None'}")
-except Exception as e:
-    st.error(f"Error generating content: {e}")
-    
+        try:
+            response = model.generate_content(f"Claim: {claim}\nContext: {context or 'None'}")
+        except Exception as e:
+            st.error(f"Error generating content: {e}")
 
     st.subheader("Verdict & Analysis")
     st.write(response.text)
